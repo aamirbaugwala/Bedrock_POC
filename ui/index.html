@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentCore Persona Demo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f4f5f7; --panel: #ffffff; --ink: #16191d; --ink-2: #4b5360; --ink-3: #7a828e; --line: #e3e6ea; --soft: #f7f8fa;
+    --accent: #2a62d6; --accent-soft: #e8effc;
+    --ok: #18794e; --ok-soft: #e3f3ea; --bad: #c0362c; --bad-soft: #fcebe9;
+    /* where-time-went categories (validated categorical slots 1-4) */
+    --k-infra: #2a78d6; --k-model: #eb6834; --k-tool: #1baf7a; --k-code: #eda100;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --bg: #101215; --panel: #181b1f; --ink: #eceef1; --ink-2: #b6bcc5; --ink-3: #8a919b; --line: #2b3036; --soft: #1e2227;
+      --accent: #6f9cff; --accent-soft: #1d2a44;
+      --ok: #4cc283; --ok-soft: #16291f; --bad: #ff7a70; --bad-soft: #3a1c1a;
+      --k-infra: #3987e5; --k-model: #d95926; --k-tool: #199e70; --k-code: #c98500;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 7px 14px; }
+  button:hover:not(:disabled) { border-color: var(--ink-3); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  select, textarea, input { font: inherit; color: var(--ink); background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 9px; border-radius: 999px; font-size: 12.5px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+  .chip.ok { background: var(--ok-soft); color: var(--ok); }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); }
+  .chip.plain { background: transparent; border: 1px solid var(--line); color: var(--ink-2); }
+  .muted { color: var(--ink-3); }
+  .small { font-size: 13px; }
+
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 24px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  header .spacer { flex: 1; }
+
+  /* sign-in */
+  #signin { max-width: 860px; margin: 48px auto; padding: 0 16px; }
+  #signin h2 { font-size: 24px; margin: 0 0 6px; }
+  #signin p { color: var(--ink-2); margin: 0 0 22px; }
+  .users { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .user { text-align: left; padding: 14px 16px; border-radius: 12px; display: grid; gap: 8px; background: var(--panel); }
+  .user:hover { border-color: var(--accent); }
+  .user b { font-size: 16px; }
+  .user .unlocks { font-size: 13px; color: var(--ink-2); }
+  #pw-row { margin-top: 16px; display: flex; gap: 8px; }
+  #signin-msg { margin-top: 12px; color: var(--bad); }
+
+  /* app */
+  #app { display: grid; grid-template-columns: minmax(340px, 5fr) minmax(0, 7fr); gap: 18px; padding: 18px 24px; max-width: 1600px; margin: 0 auto; align-items: start; }
+  @media (max-width: 1080px) { #app { grid-template-columns: 1fr; padding: 14px 16px; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; min-width: 0; }
+  .card + .card { margin-top: 14px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); margin: 0 0 12px; font-weight: 650; }
+
+  /* persona + chat */
+  .field-label { font-size: 13px; color: var(--ink-2); display: block; margin-bottom: 6px; }
+  #persona { width: 100%; font-size: 16px; }
+  .persona-card { margin-top: 10px; padding: 12px 14px; border-radius: 10px; background: var(--soft); }
+  .persona-card .blurb { font-size: 14.5px; }
+  .persona-card .who { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--ink-2); }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); margin-top: 10px; cursor: pointer; }
+  #chat { display: flex; flex-direction: column; gap: 12px; min-height: 260px; max-height: 52vh; overflow-y: auto; margin: 16px 0 10px; padding-right: 2px; }
+  .msg { border-radius: 12px; padding: 11px 14px; overflow-x: auto; }
+  .msg.you { align-self: flex-end; background: var(--accent); color: #fff; max-width: 85%; }
+  .msg.bot { background: var(--soft); border: 1px solid var(--line); }
+  .msg.err { background: var(--bad-soft); color: var(--bad); }
+  .msg .meta { font-size: 12.5px; color: var(--ink-3); margin-bottom: 4px; }
+  .msg.err .meta { color: var(--bad); }
+  .msg table { border-collapse: collapse; margin: 6px 0; font-size: 14px; }
+  .msg th, .msg td { border: 1px solid var(--line); padding: 3px 9px; text-align: left; }
+  .msg p { margin: 4px 0; } .msg ul, .msg ol { margin: 4px 0; padding-left: 22px; }
+  .empty { color: var(--ink-3); text-align: center; padding: 34px 10px; }
+  .suggest { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .suggest button { font-size: 13px; padding: 4px 12px; border-radius: 999px; color: var(--ink-2); }
+  .composer { display: flex; gap: 8px; align-items: flex-end; }
+  .composer textarea { flex: 1; resize: vertical; min-height: 46px; }
+  .demos { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .demos button { font-size: 13px; padding: 5px 11px; }
+
+  /* summary */
+  #summary .headline { font-size: 18px; font-weight: 600; }
+  #summary .sub { color: var(--ink-2); margin-top: 2px; }
+  .tbar { display: flex; gap: 2px; height: 14px; margin: 14px 0 10px; }
+  .tbar i { display: block; height: 100%; min-width: 3px; }
+  .tbar i:first-child { border-radius: 4px 0 0 4px; } .tbar i:last-child { border-radius: 0 4px 4px 0; }
+  .tbar i:only-child { border-radius: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13.5px; }
+  .legend > span { display: inline-flex; align-items: center; gap: 7px; }
+  .legend > span::before { content: ""; width: 12px; height: 12px; border-radius: 3px; background: var(--c); }
+  .legend b { font-weight: 600; }
+
+  /* sequence diagram */
+  .seq { --lanes: 8; }
+  .seq-head, .seq-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) 78px; align-items: center; }
+  .seq-head .lanes { display: grid; grid-template-columns: repeat(var(--lanes), 1fr); }
+  .lane { text-align: center; padding: 6px 2px 8px; border-radius: 8px; transition: background .2s; }
+  .lane b { display: block; font-size: 12.5px; line-height: 1.25; }
+  .lane span { display: block; font-size: 11px; color: var(--ink-3); line-height: 1.2; }
+  .lane.on { background: var(--accent-soft); }
+  .lane.on b { color: var(--accent); }
+  .seq-body { position: relative; }
+  .lifelines { position: absolute; inset: 0 78px 0 30px; display: grid; grid-template-columns: repeat(var(--lanes), 1fr); pointer-events: none; }
+  .lifelines i { border-left: 1px dashed var(--line); justify-self: center; height: 100%; }
+  .seq-row { min-height: 50px; border-radius: 8px; cursor: pointer; position: relative; }
+  .seq-row:hover { background: var(--soft); }
+  .seq-row.sel { background: var(--accent-soft); }
+  .seq-row.faded { opacity: .45; }
+  .seq-n { font-size: 11.5px; font-weight: 700; color: var(--ink-3); text-align: center; }
+  .seq-ms { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); text-align: right; padding-right: 6px; white-space: nowrap; }
+  .track { position: relative; height: 50px; }
+  .arrow { position: absolute; top: 24px; height: 0; border-top: 2px solid var(--c, var(--ink-3)); }
+  .arrow::after { content: ""; position: absolute; top: -6px; border: 5px solid transparent; }
+  .arrow.r::after { right: -2px; border-left: 8px solid var(--c, var(--ink-3)); border-right: 0; }
+  .arrow.l::after { left: -2px; border-right: 8px solid var(--c, var(--ink-3)); border-left: 0; }
+  .arrow .lbl, .arrow .ret { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 12.5px; padding: 0 6px; background: var(--panel); border-radius: 4px; }
+  .seq-row:hover .arrow .lbl, .seq-row:hover .arrow .ret { background: var(--soft); }
+  .seq-row.sel .arrow .lbl, .seq-row.sel .arrow .ret { background: var(--accent-soft); }
+  .arrow .lbl { top: -21px; font-weight: 550; }
+  .arrow .ret { top: 4px; color: var(--ink-2); font-size: 12px; }
+  .note.first { transform: none; } .note.last { transform: translateX(-100%); }
+  .note { position: absolute; top: 13px; transform: translateX(-50%); white-space: nowrap; font-size: 12.5px; padding: 3px 10px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); border: 1px solid transparent; }
+  .seq-row.bad .note { background: var(--bad-soft); color: var(--bad); }
+  .seq-row.bad .arrow { --c: var(--bad) !important; }
+  .seq-row.bad .seq-n { color: var(--bad); }
+  .live .arrow { border-top-style: dashed; animation: pulse 1s ease-in-out infinite; }
+  .live .seq-ms { color: var(--accent); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .alt { display: none; font-size: 13.5px; padding: 6px 0; }
+  @media (max-width: 700px) {
+    .seq-head .lanes, .lifelines { display: none; }
+    .track { display: none; } .alt { display: block; }
+    .seq-head, .seq-row { grid-template-columns: 26px minmax(0, 1fr) 70px; }
+  }
+
+  /* detail */
+  #detail h3 { margin: 0 0 4px; font-size: 16px; }
+  #detail .route { color: var(--ink-3); font-size: 13px; margin-bottom: 10px; }
+  #detail .sect { margin-top: 12px; }
+  #detail .sect b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); margin-bottom: 3px; }
+  #detail .sect p { margin: 0; }
+  pre { font-family: var(--mono); font-size: 12px; background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow: auto; max-height: 280px; margin: 0; white-space: pre-wrap; word-break: break-word; }
+  details summary { cursor: pointer; color: var(--ink-2); font-size: 13.5px; }
+  details pre { margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AgentCore persona demo</h1>
+  <span class="chip plain" id="region-chip"></span>
+  <span class="chip plain" id="model-chip"></span>
+  <span class="spacer"></span>
+  <span id="whoami"></span>
+  <button id="signout" hidden>Sign out</button>
+</header>
+
+<section id="signin">
+  <h2>Who are you?</h2>
+  <p>Each demo user is in different Cognito groups, and groups decide which personas they may use. Clicking a user signs in with Amazon Cognito straight from this page.</p>
+  <div class="users" id="users"></div>
+  <div id="pw-row" hidden><input id="password" type="password" placeholder="Password (DEMO_USER_PASSWORD in .env)" style="flex:1"></div>
+  <div id="signin-msg"></div>
+</section>
+
+<div id="app" hidden>
+  <section>
+    <div class="card">
+      <label class="field-label" for="persona">Persona</label>
+      <select id="persona"></select>
+      <div class="persona-card" id="persona-card"></div>
+      <label class="toggle"><input type="checkbox" id="show-locked"> Let me pick locked personas (to see the server refuse)</label>
+      <div id="chat"></div>
+      <div class="suggest" id="suggest"></div>
+      <div class="composer">
+        <textarea id="prompt" rows="2" placeholder="Ask about a US-listed company…"></textarea>
+        <button class="primary" id="send">Send</button>
+      </div>
+      <div class="demos">
+        <span class="muted small">Security demos:</span>
+        <button id="demo-notoken" title="Same request with no Authorization header">Send without a token</button>
+        <button id="demo-tampered" title="Same request with one character of the token's signature changed">Send a tampered token</button>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="card" id="summary">
+      <div class="headline" id="headline">Send a message to see its journey.</div>
+      <div class="sub" id="subline">Every hop appears live as it happens. Click any row for details.</div>
+      <div id="breakdown"></div>
+    </div>
+    <div class="card">
+      <h2>Request journey</h2>
+      <div class="seq" id="seq"></div>
+    </div>
+    <div class="card" id="detail" hidden></div>
+    <div class="card">
+      <details><summary>Your access token, decoded (what each hop sees)</summary><pre id="token"></pre></details>
+      <details style="margin-top:8px"><summary>Raw events from the agent</summary><pre id="raw">—</pre></details>
+    </div>
+  </section>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const md = (s) => (window.marked && window.DOMPurify) ? DOMPurify.sanitize(marked.parse(s || "")) : `<p>${esc(s)}</p>`;
+const fmtMs = (ms, approx) => ms == null ? "" : `${approx ? "≈" : ""}${ms >= 1000 ? (ms / 1000).toFixed(1) + " s" : Math.round(ms) + " ms"}`;
+const shortTool = (n) => String(n).split("___").pop();
+const kb = (b) => b >= 1024 ? `${(b / 1024).toFixed(1)} KB` : `${b} B`;
+
+const LANES = [
+  ["browser", "Browser", "this page"],
+  ["cognito", "Cognito", "sign-in"],
+  ["runtime", "AgentCore Runtime", "front door + microVM"],
+  ["agent", "Your agent", "agent.py · Strands"],
+  ["bedrock", "Bedrock model", "LLM"],
+  ["gateway", "AgentCore Gateway", "+ interceptor λ"],
+  ["mcp", "MCP server", "finance MCP"],
+  ["data", "Data", "S3 cache / API"],
+];
+const LANE_IX = Object.fromEntries(LANES.map(([id], i) => [id, i]));
+const KIND_VAR = { infra: "--k-infra", model: "--k-model", tool: "--k-tool", code: "--k-code" };
+const SUGGESTIONS = ["What's your take on Microsoft (MSFT)?", "Is MSFT a risky bet right now?", "How has MSFT's revenue trended?"];
+
+let cfg, auth = null, run = null;
+const chats = {}, sessions = {};
+
+/* ---------- identity ---------- */
+function claimsOf(token) {
+  const p = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+  return JSON.parse(atob(p + "=".repeat((4 - p.length % 4) % 4)));
+}
+const groupsOf = () => auth?.claims["cognito:groups"] || [];
+const canUse = (p, groups = groupsOf()) => !p.allowed_groups.length || p.allowed_groups.some((g) => groups.includes(g));
+
+async function boot() {
+  cfg = await (await fetch("/config.json")).json();
+  $("region-chip").textContent = cfg.region;
+  $("model-chip").textContent = cfg.model;
+  LANES[4][2] = cfg.model.replace(/^(apac|us|eu|global|in)\./, "").replace(/-v\d.*$/, "");
+  if (!cfg.demo_password) $("pw-row").hidden = false;
+  $("users").innerHTML = Object.entries(cfg.cognito.users).map(([u, gs]) => {
+    const unlocks = cfg.personas.filter((p) => canUse(p, gs)).map((p) => p.label);
+    return `<button class="user" data-user="${esc(u)}"><b>${esc(u)}</b>
+      <span>${gs.length ? gs.map((g) => `<span class="chip">${esc(g)}</span>`).join(" ") : '<span class="chip plain">no groups</span>'}</span>
+      <span class="unlocks">${unlocks.length ? "Can use: " + esc(unlocks.join(", ")) : "Can't use any persona"}</span></button>`;
+  }).join("");
+  document.querySelectorAll(".user").forEach((b) => b.onclick = () => signIn(b.dataset.user));
+}
+
+async function signIn(username) {
+  $("signin-msg").textContent = "";
+  const t0 = performance.now();
+  const r = await fetch(`https://cognito-idp.${cfg.region}.amazonaws.com/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-amz-json-1.1", "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" },
+    body: JSON.stringify({ AuthFlow: "USER_PASSWORD_AUTH", ClientId: cfg.cognito.client_id,
+                           AuthParameters: { USERNAME: username, PASSWORD: cfg.demo_password || $("password").value } }),
+  });
+  const body = await r.json();
+  if (!r.ok) { $("signin-msg").textContent = `Cognito refused the sign-in: ${body.message || body.__type}`; return; }
+  const token = body.AuthenticationResult.AccessToken;
+  auth = { token, claims: claimsOf(token), ms: Math.round(performance.now() - t0), shown: false };
+  $("signin").hidden = true; $("app").hidden = false; $("signout").hidden = false;
+  $("whoami").innerHTML = `<span class="muted small">signed in as</span> <span class="chip ok">${esc(auth.claims.username)}</span> ` +
+    (groupsOf().map((g) => `<span class="chip">${esc(g)}</span>`).join(" ") || '<span class="chip plain">no groups</span>');
+  $("token").textContent = JSON.stringify(auth.claims, null, 2);
+  renderPersonas();
+  resetJourney();
+}
+
+function signOut() {
+  auth = null; run = null;
+  for (const k of Object.keys(chats)) delete chats[k];
+  for (const k of Object.keys(sessions)) delete sessions[k];
+  $("app").hidden = true; $("signin").hidden = false; $("signout").hidden = true; $("whoami").innerHTML = "";
+}
+
+/* ---------- persona + chat ---------- */
+const persona = () => cfg.personas.find((p) => p.id === $("persona").value);
+
+function renderPersonas() {
+  const showLocked = $("show-locked").checked, prev = $("persona").value;
+  $("persona").innerHTML = cfg.personas.map((p) => {
+    const ok = canUse(p);
+    return `<option value="${esc(p.id)}" ${!ok && !showLocked ? "disabled" : ""}>${ok ? "" : "🔒 "}${esc(p.label)}${ok ? "" : " (locked for you)"}</option>`;
+  }).join("");
+  const usable = [...$("persona").options].filter((o) => !o.disabled);
+  $("persona").value = usable.some((o) => o.value === prev) ? prev : (usable[0]?.value || "");
+  renderPersonaCard();
+}
+
+function renderPersonaCard() {
+  const p = persona();
+  if (!p) {
+    $("persona-card").innerHTML = `<div class="blurb">None of your groups unlock a persona.</div><div class="who">Tick the box below to pick one anyway and watch the agent refuse.</div>`;
+    $("chat").innerHTML = ""; $("suggest").innerHTML = ""; return;
+  }
+  const ok = canUse(p);
+  $("persona-card").innerHTML = `<div class="blurb">${esc(p.blurb)}</div>
+    <div class="who">Allowed groups: ${p.allowed_groups.map((g) => `<span class="chip ${groupsOf().includes(g) ? "ok" : "plain"}">${groupsOf().includes(g) ? "✓ " : ""}${esc(g)}</span>`).join(" ")}
+    ${ok ? "" : '<span class="chip bad">you are not in any of these</span>'}</div>`;
+  $("chat").innerHTML = (chats[p.id] || []).join("") || `<div class="empty">Ask the ${esc(p.label.toLowerCase())} something.<br><span class="small">All four personas read the same finance data; only the lens differs.</span></div>`;
+  $("chat").scrollTop = $("chat").scrollHeight;
+  $("suggest").innerHTML = SUGGESTIONS.map((s) => `<button>${esc(s)}</button>`).join("");
+  $("suggest").querySelectorAll("button").forEach((b) => b.onclick = () => send(b.textContent));
+}
+
+function pushMsg(pid, html, replaceLast = false) {
+  chats[pid] ||= [];
+  if (replaceLast) chats[pid].pop();
+  chats[pid].push(html);
+  if (persona()?.id === pid) renderPersonaCard();
+}
+
+/* ---------- journey model ---------- */
+function resetJourney() {
+  run = null;
+  $("headline").textContent = "Send a message to see its journey.";
+  $("subline").textContent = "Every hop appears live as it happens. Click any row for details.";
+  $("breakdown").innerHTML = "";
+  $("detail").hidden = true;
+  renderSeq();
+}
+
+function newRun(p, prompt, mode, tokenUsed) {
+  run = { persona: p, prompt, mode, tokenUsed, t0: performance.now(), rows: [], events: [], selected: null, pinned: false,
+          status: "live", totalMs: null, summary: null, error: null };
+  if (!auth.shown) {
+    auth.shown = true;
+    addRow({ id: "signin", kind: "infra", from: "browser", to: "cognito", label: "sign in (InitiateAuth)", ret: "JWT access token",
+      ms: auth.ms, title: "Sign in with Amazon Cognito",
+      what: "The browser sends the username and password straight to Cognito. Cognito returns a signed JWT access token that names the user and lists their groups. Every later hop trusts this token, not the password.",
+      security: "Public app client, no secret in the browser. In production use Cognito's hosted login with PKCE.",
+      data: { username: auth.claims.username, "cognito:groups": groupsOf(), client_id: auth.claims.client_id, expires: new Date(auth.claims.exp * 1000).toLocaleTimeString() } });
+  } else {
+    addRow({ id: "signin", kind: "infra", note: "browser", label: "reusing token from sign-in", faded: true, title: "Token reused",
+      what: "No new sign-in: the browser keeps the access token from earlier and sends it with every request until it expires.",
+      security: `Token expires at ${new Date(auth.claims.exp * 1000).toLocaleTimeString()}.`, data: null });
+  }
+  const sentHeader = mode === "none" ? "(no header sent)" : `Bearer ${tokenUsed.slice(0, 24)}…${mode === "tampered" ? " (signature altered)" : ""}`;
+  addRow({ id: "send", kind: "infra", from: "browser", to: "runtime", label: "POST /invocations", live: true, title: "Browser calls the AgentCore Runtime",
+    what: "One HTTPS request straight from this page to the persona's AgentCore Runtime endpoint (AgentCore allows browser calls via CORS, so there is no backend in between). The answer streams back on the same connection.",
+    security: "The Authorization header carries the Cognito token. A session-ID header pins the conversation to one microVM.",
+    data: { url: p.url.replace(/runtimes\/[^/]+/, `runtimes/…${p.runtime_name}…`), Authorization: sentHeader,
+            "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": sessions[p.id], body: { prompt, stream: true } } });
+}
+
+function addRow(row) { run.rows.push(row); autoSelect(); renderSeq(); }
+function row(id) { return run.rows.find((r) => r.id === id); }
+function patch(id, fields) { const r = row(id); if (r) Object.assign(r, fields); autoSelect(); renderSeq(); }
+function autoSelect() { if (!run.pinned && run.rows.length) run.selected = run.rows[run.rows.length - 1].id; }
+
+function onEvent(e) {
+  run.events.push(e);
+  $("raw").textContent = run.events.map((x) => JSON.stringify(x)).join("\n");
+  const elapsed = performance.now() - run.t0;
+  switch (e.type) {
+    case "agent_start": {
+      patch("send", { live: false, ms: elapsed, ret: "✓ accepted", label: "POST /invocations" });
+      addRow({ id: "frontdoor", kind: "infra", note: "runtime", label: "✓ token valid", title: "Front door: JWT authorizer",
+        what: "Before any of your code runs, AgentCore checks the token: signature against Cognito's public keys, not expired, issued to the allowed app client. A bad token stops here with HTTP 401.",
+        security: "Configured on the runtime as customJWTAuthorizer (discovery URL + allowedClients).",
+        data: { user: e.identity?.user, client_id: e.identity?.client_id } });
+      addRow({ id: "invoke", kind: "infra", from: "runtime", to: "agent", label: "run your code", ret: e.microvm === "cold" ? "new microVM (cold start)" : "warm microVM",
+        title: "Session routed to an isolated microVM",
+        what: `Each session gets its own microVM running agent.py. This one was ${e.microvm === "cold" ? "cold: AgentCore started a fresh microVM, which is most of the wait on the first message" : "warm: reused from an earlier message in this session"}. The Authorization header is forwarded because it's on the runtime's header allow-list.`,
+        security: "MicroVMs are never shared between sessions.", data: { persona: e.persona, microvm: e.microvm, session_id: e.session_id } });
+      break;
+    }
+    case "authz": {
+      addRow({ id: "authz", kind: "code", note: "agent", bad: !e.allowed,
+        label: e.allowed ? `✓ ${e.user_groups.find((g) => e.allowed_groups.includes(g)) || "allowed"}` : "✗ not in an allowed group",
+        title: "Your agent checks the user's groups",
+        what: e.allowed ? "agent.py reads cognito:groups from the token and finds a group this persona allows."
+                        : "agent.py reads cognito:groups from the token: none of them are allowed to use this persona, so it refuses with HTTP 403. No model or tool is called.",
+        security: "The runtime proved who the user is; this decides what they may do. It's enforced on the server, not just hidden in the UI.",
+        data: { user_groups: e.user_groups, persona_allows: e.allowed_groups, decision: e.allowed ? "allowed" : "forbidden (403)" } });
+      break;
+    }
+    case "tools_list": {
+      const viaGw = e.via === "AgentCore Gateway";
+      if (e.phase === "start") {
+        addRow({ id: "tools", kind: "code", from: "agent", to: viaGw ? "gateway" : "mcp", label: "list tools", live: true, title: "Discover tools", what: "", data: null });
+      } else {
+        patch("tools", { live: false, ms: e.ms, ret: `${e.tools.length} tools`,
+          what: viaGw ? "The agent asks the Gateway which tools exist (MCP tools/list), sending the user's token. The Gateway answers from its own tool catalog, synced from the MCP server when the target was created, so the MCP server isn't called here. The agent keeps only the tools this persona allows."
+                      : "The agent asks the MCP server directly which tools exist (local mode, no Gateway).",
+          security: viaGw ? "The Gateway checks the token with its own JWT authorizer." : "Local mode.",
+          data: { tools_visible: e.tools.map(shortTool), persona_allows: e.allowed } });
+      }
+      break;
+    }
+    case "model": {
+      const id = e.id;
+      if (e.phase === "start") {
+        addRow({ id, kind: "model", from: "agent", to: "bedrock", label: e.n === 1 ? "your question + tool list" : "tool result, please continue", live: true,
+          title: `Bedrock model call #${e.n}`, what: "", data: { model: e.model, messages_in_conversation: e.messages, tool_schemas_sent: e.tools } });
+      } else {
+        const wants = e.wants?.length ? `wants ${e.wants.map((w) => shortTool(w.name)).join(", ")}` : (e.stop_reason === "end_turn" ? "final answer" : e.stop_reason);
+        patch(id, { live: false, ms: e.ms, ret: wants, bad: e.stop_reason === "error",
+          what: e.wants?.length
+            ? `The agent sends the conversation and the tool schemas to the model (ConverseStream). The model doesn't call anything itself; it replies "please run ${e.wants.map((w) => shortTool(w.name)).join(", ")}" and the agent does it.`
+            : "The agent sends everything so far, including the tool result. The model writes the final answer.",
+          security: "Signed with the runtime's IAM execution role; the model never sees tokens or credentials.",
+          data: { ...row(id).data, stop_reason: e.stop_reason, tokens_in: e.tokens_in, tokens_out: e.tokens_out,
+                  ...(e.wants?.length ? { tool_requests: e.wants } : { answer_chars: e.text_chars }) } });
+      }
+      break;
+    }
+    case "tool": {
+      if (e.phase === "start") {
+        addRow({ id: e.id, kind: "tool", from: "agent", to: "gateway", label: `call ${shortTool(e.name)}`, live: true, title: `Tool call: ${shortTool(e.name)}`, what: "", data: { input: e.input } });
+      } else if (e.phase === "end") {
+        expandTool(e);
+      } else {
+        addRow({ id: e.id, kind: "tool", note: "agent", bad: true, label: "✗ tool limit reached", title: "Tool call cancelled", what: e.reason, data: null });
+      }
+      break;
+    }
+    case "done": {
+      run.summary = e.summary;
+      addRow({ id: "answer", kind: "infra", from: "agent", to: "browser", dir: "l", label: "answer + journey", ret: `${e.summary.output_tokens} tokens written`,
+        title: "Answer streams back", what: "The final answer goes back over the same HTTPS connection. The journey events you're looking at came over it too, as they happened.",
+        security: "Same response, no extra round trip.", data: { tools_used: e.tools_used.map(shortTool), ...e.summary } });
+      break;
+    }
+    case "error": {
+      run.error = e.error;
+      addRow({ id: "error", kind: "code", note: "agent", bad: true, label: "✗ error", title: "The agent hit an error", what: e.error, data: e });
+      break;
+    }
+  }
+}
+
+function expandTool(e) {
+  const at = run.rows.findIndex((r) => r.id === e.id);
+  const m = e.mcp || {};
+  const clamp = (v) => Math.max(0, v ?? 0);
+  const viaGw = !!m.intercepted_at_ms;
+  const data = { input: row(e.id).data.input, result: e.preview + (e.bytes > e.preview.length ? " …" : "") };
+  const sub = [];
+  if (viaGw) {
+    sub.push({ id: e.id + ":in", kind: "tool", from: "agent", to: "gateway", label: `call ${shortTool(e.name)}`, ms: clamp(m.intercepted_at_ms - e.sent_at_ms), approx: true,
+      title: "Agent → Gateway: tools/call", what: "The agent sends the tool call to the Gateway with the user's token. The Gateway checks the token, then runs the REQUEST interceptor Lambda.",
+      security: "Gateway JWT authorizer (same Cognito token).", data: { tool: e.name, input: data.input } });
+    sub.push({ id: e.id + ":icpt", kind: "tool", note: "gateway", label: `λ adds ${m.user} to _meta`, title: "Interceptor adds the user's identity",
+      what: "Gateway → MCP-server targets can't forward the user's token as a header, so a small Lambda copies the verified user, groups and token into the MCP request body (params._meta).",
+      security: "This is how per-user identity reaches the data layer. The Lambda never logs the token.", data: { "_meta.caller": { user: m.user, groups: m.groups } } });
+    sub.push({ id: e.id + ":fwd", kind: "tool", from: "gateway", to: "mcp", label: "forward (IAM-signed)", ret: m.microvm === "cold" ? "MCP microVM cold start" : "", ms: clamp(m.received_at_ms - m.intercepted_at_ms), approx: true,
+      title: "Gateway → MCP server", what: `The Gateway forwards the call to the MCP server's AgentCore Runtime, signing it with the Gateway's own IAM role. The MCP runtime accepts only that role. ${m.microvm === "cold" ? "The MCP microVM was cold, which adds start-up time here." : ""}`,
+      security: "SigV4 with the Gateway's IAM role (GATEWAY_IAM_ROLE).", data: { target: "finance", auth: "SigV4 (gateway role)", mcp_microvm: m.microvm } });
+  } else {
+    sub.push({ id: e.id + ":in", kind: "tool", from: "agent", to: "mcp", label: `call ${shortTool(e.name)}`, title: "Agent → MCP server (local mode)", what: "Local mode: the agent calls the MCP server directly.", data: { input: data.input } });
+  }
+  const source = m.api_calls ? `${m.api_calls} live API + ${m.cache_hits} cached` : `${m.cache_hits ?? "?"} reads, all cached`;
+  sub.push({ id: e.id + ":data", kind: "tool", from: "mcp", to: "data", label: "read data", ret: source, ms: m.server_ms,
+    title: "MCP server fetches the data", what: `The tool runs for ${m.user || "the user"}. It read ${m.cache_hits} item(s) from the shared S3 cache and made ${m.api_calls} live Alpha Vantage call(s). In your setup, this is where the MCP server calls GraphQL with the user's token from _meta.`,
+    security: `Identity arrived via ${m.identity_via || "nothing"}.`, data: { served_for: { user: m.user, groups: m.groups }, cache_hits: m.cache_hits, api_calls: m.api_calls, server_ms: m.server_ms } });
+  sub.push({ id: e.id + ":back", kind: "tool", from: viaGw ? "mcp" : "mcp", to: "agent", dir: "l", label: `result ${kb(e.bytes)}`, ret: m.user ? `made for ${m.user}` : "",
+    ms: viaGw ? clamp(e.done_at_ms - (m.received_at_ms + m.server_ms)) : null, approx: viaGw, bad: e.status !== "success",
+    title: "Result goes back to the agent", what: "The result travels back through the Gateway to the agent. The agent strips the MCP's timing stamp so the model only sees the data.",
+    security: "", data: { status: e.status, bytes: e.bytes, result_preview: data.result } });
+  run.rows.splice(at, 1, ...sub);
+  autoSelect(); renderSeq();
+}
+
+/* ---------- send ---------- */
+async function send(text, mode = "normal") {
+  const p = persona(), prompt = (text ?? $("prompt").value).trim();
+  if (!p || !prompt || !auth || run?.status === "live") return;
+  $("prompt").value = "";
+  setBusy(true);
+  sessions[p.id] ||= `ui-${p.id}-${crypto.randomUUID()}`;
+  const tag = mode === "none" ? " (sent without a token)" : mode === "tampered" ? " (sent with a tampered token)" : "";
+  pushMsg(p.id, `<div class="msg you">${esc(prompt)}${esc(tag)}</div>`);
+  pushMsg(p.id, `<div class="msg bot"><div class="meta">${esc(p.label)}</div><span class="muted">Working… watch the journey on the right.</span></div>`);
+  const tokenUsed = mode === "tampered" ? auth.token.slice(0, -4) + (auth.token.slice(-4) === "AAAA" ? "BBBB" : "AAAA") : auth.token;
+  newRun(p, prompt, mode, tokenUsed);
+  $("headline").textContent = `Asking the ${p.label.toLowerCase()}…`;
+  $("subline").textContent = "Rows appear as each hop happens.";
+  $("breakdown").innerHTML = "";
+
+  const headers = { "Content-Type": "application/json", "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": sessions[p.id] };
+  if (mode !== "none") headers.Authorization = `Bearer ${tokenUsed}`;
+  let answer = null, status = 0, errorText = null;
+  try {
+    const r = await fetch(p.url, { method: "POST", headers, body: JSON.stringify({ prompt, stream: true }) });
+    status = r.status;
+    if ((r.headers.get("content-type") || "").includes("text/event-stream")) {
+      const reader = r.body.getReader(), dec = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let cut;
+        while ((cut = buf.indexOf("\n\n")) >= 0) {
+          const chunk = buf.slice(0, cut); buf = buf.slice(cut + 2);
+          const line = chunk.split("\n").find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          const e = JSON.parse(line.slice(5));
+          if (e.type === "done") answer = e;
+          if (e.type === "error" || (!e.type && e.error)) errorText = e.error || e.message;
+          onEvent(e.type ? e : { type: "error", error: e.error || e.message });
+        }
+      }
+    } else {
+      const body = await r.json().catch(() => ({}));
+      (body.events || []).forEach(onEvent);
+      errorText = body.error?.message || body.error || body.message || `HTTP ${status}`;
+      if (!body.events) frontDoorReject(status, errorText);  // AgentCore itself refused: our code never ran
+    }
+  } catch (err) { errorText = String(err); }
+  run.totalMs = performance.now() - run.t0;
+  run.status = answer ? "done" : "failed";
+  if (answer) {
+    pushMsg(p.id, `<div class="msg bot"><div class="meta">${esc(p.label)} · ${fmtMs(run.totalMs)} · used ${esc(answer.tools_used.map(shortTool).join(", ") || "no tools")}</div>${md(answer.answer)}</div>`, true);
+  } else {
+    pushMsg(p.id, `<div class="msg err"><div class="meta">${esc(p.label)} · HTTP ${status}</div>${esc(errorText)}</div>`, true);
+  }
+  renderSummary(status, errorText);
+  renderSeq();
+  setBusy(false);
+}
+
+function frontDoorReject(status, msg) {
+  patch("send", { live: false, bad: true, ms: performance.now() - run.t0, ret: `✗ HTTP ${status}` });
+  addRow({ id: "frontdoor", kind: "infra", note: "runtime", bad: true, label: "✗ rejected at the front door", title: "Front door: JWT authorizer said no",
+    what: `AgentCore refused the request before starting any microVM or running any of your code: ${msg}. A missing, expired, forged or wrong-client token all end here.`,
+    security: "Nothing behind the front door (agent, model, Gateway, MCP, data) was touched.", data: { status, message: msg } });
+}
+
+function setBusy(b) { ["send", "demo-notoken", "demo-tampered"].forEach((id) => $(id).disabled = b); }
+
+/* ---------- rendering ---------- */
+function renderSummary(status, errorText) {
+  const rows = run.rows, ev = run.events;
+  const models = ev.filter((e) => e.type === "model" && e.phase === "end"), tools = ev.filter((e) => e.type === "tool" && e.phase === "end");
+  const services = new Set(rows.flatMap((r) => [r.from, r.to, r.note]).filter(Boolean)); services.delete("browser");
+  const failedAt = rows.map((r) => r.bad).lastIndexOf(true), failed = rows[failedAt];
+  const hopNo = rows.slice(0, failedAt + 1).filter((r) => !r.faded).length;
+  if (run.status === "done") {
+    $("headline").textContent = `Answered in ${fmtMs(run.totalMs)}`;
+    $("subline").textContent = `${rows.filter((r) => !r.faded).length} hops across ${services.size} components · ${models.length} model call${models.length === 1 ? "" : "s"} · ${tools.length} tool call${tools.length === 1 ? "" : "s"}`;
+    const model = models.reduce((s, e) => s + e.ms, 0), tool = tools.reduce((s, e) => s + e.ms, 0);
+    const agent = run.summary?.agent_ms ?? model + tool;
+    const parts = [
+      ["AgentCore + network", Math.max(0, run.totalMs - agent), "infra", "Front door, microVM start-up and the network to and from AWS"],
+      ["Bedrock model", model, "model", "Time the model spent reading and writing"],
+      ["Tools & data", tool, "tool", "Gateway, interceptor, MCP server and the data source"],
+      ["Your agent code", Math.max(0, agent - model - tool), "code", "Connecting to the Gateway, listing tools, bookkeeping"],
+    ];
+    const total = parts.reduce((s, p) => s + p[1], 0) || 1;
+    $("breakdown").innerHTML = `<div class="tbar" role="img" aria-label="Where the time went">${parts.filter((p) => p[1] > 0).map(([n, v, k, h]) =>
+      `<i style="flex:${v};background:var(${KIND_VAR[k]})" title="${esc(n)}: ${fmtMs(v)} (${Math.round(v / total * 100)}%) — ${esc(h)}"></i>`).join("")}</div>
+      <div class="legend">${parts.map(([n, v, k]) => `<span style="--c:var(${KIND_VAR[k]})">${esc(n)} <b>${fmtMs(v)}</b> <span class="muted">${Math.round(v / total * 100)}%</span></span>`).join("")}</div>`;
+  } else {
+    $("headline").textContent = failed ? `Stopped at hop ${hopNo}: ${failed.title}` : `Failed (HTTP ${status})`;
+    $("subline").textContent = errorText || "";
+  }
+}
+
+function lanePos(id) { return ((LANE_IX[id] + 0.5) / LANES.length) * 100; }
+
+function renderSeq() {
+  const used = new Set();
+  (run?.rows || []).forEach((r) => [r.from, r.to, r.note].forEach((l) => l && !r.faded && used.add(l)));
+  const head = `<div class="seq-head"><span></span><div class="lanes">${LANES.map(([id, name, sub]) =>
+    `<div class="lane ${used.has(id) ? "on" : ""}"><b>${esc(name)}</b><span>${esc(sub)}</span></div>`).join("")}</div><span></span></div>`;
+  if (!run) { $("seq").innerHTML = head + `<div class="empty">Each hop of your next message will be drawn here.</div>`; return; }
+  let n = 0;
+  const rows = run.rows.map((r) => {
+    const num = r.faded ? "" : ++n;
+    const c = `var(${KIND_VAR[r.kind] || "--k-infra"})`;
+    let track;
+    if (r.note) {
+      const edge = LANE_IX[r.note] === 0 ? "first" : LANE_IX[r.note] === LANES.length - 1 ? "last" : "";
+      const at = edge === "first" ? 0 : edge === "last" ? 100 : lanePos(r.note);
+      track = `<span class="note ${edge}" style="left:${at}%">${esc(r.label)}</span>`;
+    } else {
+      const a = lanePos(r.from), b = lanePos(r.to), left = Math.min(a, b), width = Math.abs(b - a);
+      const dir = r.dir || (b >= a ? "r" : "l");
+      track = `<div class="arrow ${dir}" style="left:${left}%;width:${width}%;--c:${c}"><span class="lbl">${esc(r.label)}</span>${r.ret ? `<span class="ret">↳ ${esc(r.ret)}</span>` : ""}</div>`;
+    }
+    const alt = r.note ? `${LANES[LANE_IX[r.note]][1]}: ${r.label}` : `${LANES[LANE_IX[r.from]][1]} → ${LANES[LANE_IX[r.to]][1]}: ${r.label}${r.ret ? " · " + r.ret : ""}`;
+    return `<div class="seq-row ${r.live ? "live" : ""} ${r.bad ? "bad" : ""} ${r.faded ? "faded" : ""} ${run.selected === r.id ? "sel" : ""}" data-id="${esc(r.id)}">
+      <span class="seq-n">${num}</span><div><div class="track">${track}</div><div class="alt">${esc(alt)}</div></div>
+      <span class="seq-ms">${r.live ? "…" : fmtMs(r.ms, r.approx)}</span></div>`;
+  }).join("");
+  const lifelines = `<div class="lifelines">${LANES.map(() => "<i></i>").join("")}</div>`;
+  $("seq").innerHTML = head + `<div class="seq-body">${lifelines}${rows}</div>`;
+  $("seq").querySelectorAll(".seq-row").forEach((el) => el.onclick = () => { run.selected = el.dataset.id; run.pinned = true; renderSeq(); });
+  renderDetail();
+}
+
+function renderDetail() {
+  const r = run && row(run.selected);
+  if (!r) { $("detail").hidden = true; return; }
+  $("detail").hidden = false;
+  const route = r.note ? `inside ${LANES[LANE_IX[r.note]][1]}` : `${LANES[LANE_IX[r.from]][1]} → ${LANES[LANE_IX[r.to]][1]}`;
+  $("detail").innerHTML = `<h3>${esc(r.title || r.label)}</h3>
+    <div class="route">${esc(route)}${r.live ? " · in progress…" : r.ms != null ? ` · ${fmtMs(r.ms, r.approx)}${r.approx ? " (timed across machines, approximate)" : ""}` : ""}</div>
+    ${r.what ? `<div class="sect"><b>What happens</b><p>${esc(r.what)}</p></div>` : ""}
+    ${r.security ? `<div class="sect"><b>Security on this hop</b><p>${esc(r.security)}</p></div>` : ""}
+    ${r.data ? `<div class="sect"><b>On the wire</b><pre>${esc(typeof r.data === "string" ? r.data : JSON.stringify(r.data, null, 2))}</pre></div>` : ""}
+    ${run.pinned ? `<div class="sect"><button id="follow" class="small">Follow the latest hop</button></div>` : ""}`;
+  const f = $("follow"); if (f) f.onclick = () => { run.pinned = false; autoSelect(); renderSeq(); };
+}
+
+/* ---------- wiring ---------- */
+$("signout").onclick = signOut;
+$("persona").onchange = renderPersonaCard;
+$("show-locked").onchange = renderPersonas;
+$("send").onclick = () => send();
+$("prompt").onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
+$("demo-notoken").onclick = () => send($("prompt").value || SUGGESTIONS[0], "none");
+$("demo-tampered").onclick = () => send($("prompt").value || SUGGESTIONS[0], "tampered");
+boot();
+</script>
+</body>
+</html>
