@@ -96,16 +96,3 @@ make marketpro-agent    # terminal 2: agent on :8080
 make marketpro-preview  # terminal 3: http://localhost:19007
 ```
 For the real-data demo through misight, follow [docs/DEMO_CHECKLIST.md](docs/DEMO_CHECKLIST.md).
-
-## Status
-
-All phases are working and verified in a browser, covering both allowed and forbidden paths.
-Teardown hasn't been re-run since Cognito was added. See [docs/PROGRESS.md](docs/PROGRESS.md)
-for details and deviations from the original brief.
-
-**This is a POC, not production.** Known gaps before going further:
-- Use short-lived, least-privilege credentials, not long-lived keys in `.env`
-- Use Cognito Hosted UI with PKCE instead of username/password sign-in
-- Run the MCP runtime in `VPC` network mode to reach internal GraphQL
-- Warm-up or provisioned capacity to hide cold-start latency
-- Claude models were unavailable on the test account, so Nova Pro was used. Answer quality should be re-checked once Claude is available.
